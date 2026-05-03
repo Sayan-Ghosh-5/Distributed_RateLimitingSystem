@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  # 1. The C++ Backend
+  filter-engine:
+    build:
+      context: ./filter-engine
+    # We do NOT map port 5000 to the host machine.
+    # It remains hidden inside the Docker network, perfectly secure.
+
+  # 2. The Go API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+    ports:
+      - "8080:8080" # Maps your laptop's port 8080 to the container's 8080
+    depends_on:
+      - filter-engine # Ensures C++ starts before Go tries to connect
+    environment:
+      - GIN_MODE=release

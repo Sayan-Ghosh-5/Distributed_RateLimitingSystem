@@ -1,0 +1,43 @@
+# Compiled Object files, Static and Dynamic libs
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.class
+
+# Folders
+bin/
+build/
+out/
+obj/
+vendor/
+
+# Executables
+*.exe
+*.out
+*.app
+api-gateway/api-gateway
+filter-engine/filter-engine
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
