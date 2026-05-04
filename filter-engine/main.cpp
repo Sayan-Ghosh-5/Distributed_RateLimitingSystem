@@ -272,7 +272,7 @@ int main()
 {
     // --- LOAD THE THREAT DATA ---
     std::cout << "Loading threat intelligence data...\n";
-    bloomFilter.add("172.18.0.1"); // Block the Docker Gateway
+    //bloomFilter.add("172.18.0.1"); // Block the Docker Gateway
     bloomFilter.add("10.0.0.5");   // Block some other random IP
     // ----------------------------
 

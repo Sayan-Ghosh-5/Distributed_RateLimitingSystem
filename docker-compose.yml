@@ -16,5 +16,13 @@ services:
       - "8080:8080" # Maps your laptop's port 8080 to the container's 8080
     depends_on:
       - filter-engine # Ensures C++ starts before Go tries to connect
+      - redis
     environment:
       - GIN_MODE=release
+
+  # 3. The Redis State Manager
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379" # Optional: Exposes Redis to your host machine for debugging
+    

@@ -1,13 +1,35 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 )
+
+// Global Redis Client
+var rdb *redis.Client
+var ctx = context.Background()
+
+func initRedis() {
+	rdb = redis.NewClient(&redis.Options{
+		Addr: "redis:6379", // Matches the docker-compose service name!
+		DB:   0,
+	})
+
+	// Test the connection
+	_, err := rdb.Ping(ctx).Result()
+	if err != nil {
+		log.Fatalf("❌ Could not connect to Redis: %v", err)
+	}
+	fmt.Println("📦 Connected to Redis State Manager")
+}
 
 // --- 1. THE MOCK C++ ENGINE INTERFACE ---
 // In a real system, this would make a fast TCP or Unix Socket call
@@ -71,30 +93,43 @@ func checkBloomFilter(ip string) string {
 // --- 2. THE RATE LIMIT MIDDLEWARE ---
 func RateLimiterMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract the IP address (Simplified for this example)
 		ip := strings.Split(r.RemoteAddr, ":")[0]
 
-		// Query the C++ Guard Dog
+		// 1. Query the C++ Guard Dog (L1 Shield)
 		status := checkBloomFilter(ip)
 
 		switch status {
 		case "RED":
-			// Drop the request immediately. Do NOT pass to the database.
-			log.Printf("BLOCKED: %s is on the Red List", ip)
-			http.Error(w, "429 Too Many Requests - IP Blocked", http.StatusTooManyRequests)
+			log.Printf("BLOCKED BY C++: %s", ip)
+			http.Error(w, "429 Too Many Requests - Malicious IP", http.StatusTooManyRequests)
 			return
 
-		case "YELLOW":
-			// Here you would query Redis to get the exact count.
-			// If Redis says they are over the limit, block them.
-			log.Printf("WARNING: %s is in the Yellow Zone", ip)
-			// Proceed to logic...
+		case "GREEN", "YELLOW":
+			// 2. The Redis Exact-Count Logic (L2 State Manager)
+			redisKey := "rate_limit:" + ip
+			limit := int64(5) // Allow 5 requests per minute
 
-		case "GREEN":
-			log.Printf("ALLOWED: %s", ip)
+			count, err := rdb.Incr(ctx, redisKey).Result()
+			if err != nil {
+				// If Redis crashes, "Fail-Open" to keep the API alive
+				log.Printf("REDIS ERROR: %v", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if count == 1 {
+				rdb.Expire(ctx, redisKey, time.Minute)
+			}
+
+			if count > limit {
+				log.Printf("RATE LIMITED: %s (Count: %d)", ip, count)
+				http.Error(w, "429 Too Many Requests - Quota Exceeded", http.StatusTooManyRequests)
+				return
+			}
+
+			log.Printf("ALLOWED: %s (Count: %d)", ip, count)
 		}
 
-		// If we reach here, the IP is safe. Pass the request to the actual endpoint.
 		next.ServeHTTP(w, r)
 	})
 }
@@ -124,6 +159,9 @@ func ipToUint32(ipStr string) uint32 {
 }
 
 func main() {
+	// Initialize Redis connection
+	initRedis()
+
 	// Create a new router
 	mux := http.NewServeMux()
 
